@@ -4,7 +4,7 @@
       v2x_interface: "wlan1"
       cam_asn: "cam.asn"
       denm_asn: "denm.asn"
-      trace: ""
+      trace: "obu.json"
       mac: "b4:b5:b6:c4:11:49"
     topic:
       cam: "/v2x/cam"
