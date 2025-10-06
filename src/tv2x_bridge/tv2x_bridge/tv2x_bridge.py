@@ -43,24 +43,26 @@ class V2XBridge(Node):
         
         path = self.get_param("general.trace", "")
         with open(path, "r+") as f:
-            self._trace = json.loads(f.read)
+            self._trace = json.loads(f.read())
 
-    def _format_cam(self, val: dict):
-        # {"latitude": "44.6611558", "longitude": "10.9342462", "heading": "0.0", "speed": 0.0, "delta_time": 21663, "elevation": 6050}}
+  def _format_cam(self, val: dict):
+        # {"latitude": 446611558, "longitude": 109342462, "heading": 0, "speed": 0, "delta_time": 21663, "elevation": 6050}
         try:
             return ETSI.new_cam(
-                self._asn_denm, gn_addr_address=self._mac, station_id=4316, 
-                latitude=int(val["latitude"] * 1e7), longitude=int(val["longitude"] * 1e7),
-                delta_time=val["delta_time"], speed=val["speed"] * 3.6, heading=val["heading"]
+                self._asn_cam, gn_addr_address=self._mac, station_id=4316,
+                latitude=val["latitude"], longitude=val["longitude"],
+                delta_time=val["delta_time"], speed=val["speed"], heading=val["heading"]
             )
-        except: return None
-
+        except Exception as e:
+            self.get_logger().error(f"error: {str(e)}")
+            return None
+ 
     def _send_cam(self):
         if (datetime.now() - self._st_time).total_seconds() < 10:
             return
 
         if self._ok:
-            pkt = self._format(self._trace[self._idx])
+            pkt = self._format_cam(self._trace[self._idx])
             self._net.send_msg(pkt)
             self._idx += 1 % len(self._trace)
         
