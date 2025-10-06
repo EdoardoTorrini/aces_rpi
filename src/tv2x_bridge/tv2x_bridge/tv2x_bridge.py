@@ -64,7 +64,7 @@ class V2XBridge(Node):
         if self._ok:
             pkt = self._format_cam(self._trace[self._idx])
             self._net.send_msg(pkt)
-            self._idx += 1 % len(self._trace)
+            self._idx += 1 % (len(self._trace) - 1)
         
         # TODO: else resend the last position with speed: 0.0
 
