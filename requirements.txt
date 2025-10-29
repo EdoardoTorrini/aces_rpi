@@ -10,4 +10,5 @@ typeguard==4.4.2
 typing_extensions==4.13.2
 pynmeagps==1.0.53
 pyserial==3.5
-http://github.com/EdoardoTorrini/pyv2x/releases/download/pyv2x-v0.0.1-beta/pyv2x-0.0.1-py3-none-any.whl
+pyshark==0.6
+https://github.com/EdoardoTorrini/pyv2x/releases/download/pyv2x-v1.2.1-beta/pyv2x-1.2.1-py3-none-any.whl

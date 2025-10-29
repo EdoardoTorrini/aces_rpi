@@ -2,6 +2,7 @@ import os
 import json
 from datetime import datetime
 import time
+import random
 
 from typing import Type, List, Callable
 from threading import Thread
@@ -27,7 +28,24 @@ class SchedT(Thread):
         while self._run:
             st = datetime.now()
             self._callback()
-            time.sleep(self._period - max(0, (datetime.now() - st).total_seconds()))
+            time.sleep(max(0, self._period - (datetime.now() - st).total_seconds()))
+
+    def stop(self):
+        self._run = False
+
+@typechecked
+class SchedR(Thread):
+
+    def __init__(self, name: str, callback: Callable[[], None]):
+        super().__init__(name=name, daemon=True)
+
+        self._callback = callback
+        self._run = True
+
+    def run(self):
+        while self._run:
+            self._callback()
+            time.sleep(random.randint(5, 12))
 
     def stop(self):
         self._run = False
@@ -35,26 +53,69 @@ class SchedT(Thread):
 @typechecked
 class RSU:
 
-    def __init__(self, fname: str, tmsg: List[Type[V2xMsg]]):
-        self._trace = "placeholder"
-        self._idx = 0
+    def __init__(self, fname: str, iface: str, tmsg: List[Type[V2xMsg]]):
+
+        if not os.path.exists(fname):
+            raise Exception(f"{fname} not found")
+
+        self._trace = None
+        with open(fname, "r+") as f:
+            self._trace = json.loads(f.read())
+
+        assert self._trace is not None
+        self._idx, self._size = 0, len(self._trace) - 1
+
+        self._net = V2xNetwork(iface, tmsg)
+        self._tmsg = tmsg
 
         timer_cam = SchedT("cam_sender", self.send_cam, 0.1)
+        timer_denm = SchedR("denm_sender", self.send_denm)
         timer_cam.start()
+        timer_denm.start()
 
     def send_cam(self):
-        print(f"{self._idx} time: {datetime.now().timestamp()}")
-        self._idx += 1
+        msg = self._tmsg[V2xTMsg.CAM - 1](**self._trace[self._idx])
+        self._net.send_msg(ETSI.format_msg(msg, gn_addr_address="3E:B5:93:C7:D8:57"))
+        self._idx = (self._idx + 1) % (self._size)
+
+    def send_denm(self):
+        for sub_code, period in zip([1, 2, 3], [3, 1, 5]):
+            msg = self._tmsg[V2xTMsg.DENM - 1](
+                protocolVersion=2,
+                messageID=1,
+                stationID=12120,
+                originatingStationID=12120,
+                sequenceNumber=1,
+                detectionTime=100000000,
+                referenceTime=0,
+                latitude=446558300,
+                longitude=109275000,
+                semiMajorConfidence=282,
+                semiMinorConfidence=278,
+                semiMajorOrientation=616,    
+                altitudeValue=9650,
+                altitudeConfidence="alt-020-00",
+                validityDuration=1,
+                stationType=15,
+                situation_informationQuality=4,
+                situation_eventType_causeCode=1,
+                situation_eventType_subCauseCode=sub_code,
+            )
+            self._net.send_msg(ETSI.format_msg(msg, gn_addr_address="3E:B5:93:C7:D8:57"))
+            time.sleep(period)
 
 def main():
     
     cfiles = ["./asn/cam/CAM-PDU-Descriptions.asn", "./asn/cam/cdd/ITS-Container.asn"]
     dfiles = ["./asn/denm/DENM-PDU-Descriptions.asn", "./asn/denm/cdd/ITS-Container.asn"]
+    # TODO: IS_ITS è un TS e quindi suca
+    # sfiles = ["./asn/is/SPATEM-PDU-Descriptions.asn", "./asn/is/cdd/ITS-Container.asn", "./asn/is/lib/asn1/IS/ISO_TS_19091/original/DSRC.asn"]
 
     CAM =  V2xAsnP.new("CAM", cfiles).create_class()
     DENM = V2xAsnP.new("DENM", dfiles).create_class()
+    # SPATEM = V2xAsnP.new("SPATEM", sfiles).create_class()
 
-    rsu = RSU()
+    rsu = RSU("rsu.json", "hwsim0", [DENM, CAM])
     while 1: pass
 
 
