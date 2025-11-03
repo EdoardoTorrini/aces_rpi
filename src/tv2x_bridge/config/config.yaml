@@ -1,10 +1,11 @@
 /tv2x_bridge:
   ros__parameters:
     general:
+      name: "vehicle_1"
       v2x_interface: "wlan1"
-      cam_asn: "cam.asn"
-      denm_asn: "denm.asn"
-      trace: "obu.json"
+      cam_asn: ["/home/mmr/asn/cam/CAM-PDU-Descriptions.asn", "/home/mmr/asn/cam/cdd/ITS-Container.asn"]
+      denm_asn: ["/home/mmr/asn/denm/DENM-PDU-Descriptions.asn", "/home/mmr/asn/denm/cdd/ITS-Container.asn"]
+      trace: "../trace/obu.json"
       mac: "b4:b5:b6:c4:11:49"
     topic:
       cam: "/v2x/cam"
