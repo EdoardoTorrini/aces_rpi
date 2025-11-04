@@ -79,17 +79,18 @@ class RSU:
         self._idx = (self._idx + 1) % (self._size)
 
     def send_denm(self):
-        for sub_code, period in zip([1, 2, 3], [3, 1, 5]):
+        # 1 -> verde, 2 -> giallo, 3 -> rosso
+        for sub_code, period in zip([2, 3, 1], [2, 4, 0]):
             msg = self._tmsg[V2xTMsg.DENM - 1](
                 protocolVersion=2,
                 messageID=1,
-                stationID=12120,
-                originatingStationID=12120,
+                stationID=12131,
+                originatingStationID=12131,
                 sequenceNumber=1,
                 detectionTime=100000000,
                 referenceTime=0,
-                latitude=446558300,
-                longitude=109275000,
+                latitude=446529860,
+                longitude=109299810,
                 semiMajorConfidence=282,
                 semiMinorConfidence=278,
                 semiMajorOrientation=616,    

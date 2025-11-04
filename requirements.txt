@@ -12,3 +12,4 @@ pynmeagps==1.0.53
 pyserial==3.5
 pyshark==0.6
 https://github.com/EdoardoTorrini/pyv2x/releases/download/pyv2x-v1.2.1-beta/pyv2x-1.2.1-py3-none-any.whl
+haversine==2.9.0

@@ -2,6 +2,7 @@
   ros__parameters:
     general:
       name: "vehicle_1"
+      enable_v2x_pub: False
       v2x_interface: "wlan1"
       cam_asn: ["/home/mmr/asn/cam/CAM-PDU-Descriptions.asn", "/home/mmr/asn/cam/cdd/ITS-Container.asn"]
       denm_asn: ["/home/mmr/asn/denm/DENM-PDU-Descriptions.asn", "/home/mmr/asn/denm/cdd/ITS-Container.asn"]
@@ -10,3 +11,6 @@
     topic:
       cam: "/v2x/cam"
       denm: "/v2x/denm"
+    adas:
+      radius: 50 # in meters
+      min_look_forward: 2 # in index slicing

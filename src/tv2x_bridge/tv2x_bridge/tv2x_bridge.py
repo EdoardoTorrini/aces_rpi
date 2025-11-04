@@ -2,6 +2,7 @@ import rclpy
 from rclpy.node import Node
 
 from datetime import datetime
+from enum import Enum
 import os
 import json
 
@@ -13,6 +14,15 @@ from pyv2x.v2x_msg import V2xMsg
 import importlib
 from etsi_its_cam_msgs.msg import CAM
 from etsi_its_denm_msgs.msg import DENM
+from std_msgs.msg import Int8
+
+from haversine import haversine, Unit
+
+
+class ADStatus(Enum):
+    GO = 1
+    SLOW_DOWN = 2
+    STOP = 3
 
 
 class V2XBridge(Node):
@@ -21,16 +31,24 @@ class V2XBridge(Node):
         super().__init__("tv2x_bridge")
 
         self.load_parameters()
+
+        # --------------------- timer ---.-------------------
         self._ctimer = self.create_timer(0.1, self._send_cam)
         self._rtimer = self.create_timer(0.1, self._rcv_pkt)
+
+        # --------------------- publisher -------------------
         self._pub_cam = self.create_publisher(CAM, self._ctopic, 10)
         self._pub_denm = self.create_publisher(DENM, self._dtopic, 10)
+        self._pub_status = self.create_publisher(Int8, self._stopic, 10)
 
-        self._idx, self._st_time = 0, datetime.now()
         self.get_logger().info(f"starting time: {self._st_time}")
-
+        
+        # --------------------- set up env ------------------
+        self._idx, self._st_time = 0, datetime.now()
         self._net = V2xNetwork(self._iface, [self.DENM, self.CAM], filter=f"its && wlan.sa != {self._mac}")
-        self._ok = True
+        self._status = ADStatus.GO.value
+        self._pub_status.publish( Int8(value=ADStatus.GO.value) )
+
 
     def get_param(self, name: str, default):
         self.declare_parameter(name, default)
@@ -40,10 +58,9 @@ class V2XBridge(Node):
 
     def load_parameters(self):
         self._name = self.get_param("general.name", "")
+        self._enable_pub = self.get_param("general.enable_v2x_pub", False)
         self._iface = self.get_param("general.v2x_interface", "")
         self._mac = self.get_param("general.mac", "")
-        self._ctopic = self.get_param("topic.cam", "")
-        self._dtopic = self.get_param("topic.denm", "")
 
         cfiles = self.get_param("general.cam_asn", ["", ""])
         self.CAM = V2xAsnP.new("CAM", cfiles).create_class()
@@ -56,16 +73,23 @@ class V2XBridge(Node):
         with open(path, "r+") as f:
             self._trace = json.loads(f.read())
 
+        self._ctopic = self.get_param("topic.cam", "")
+        self._dtopic = self.get_param("topic.denm", "")
+        self._stopic = self.get_param("topic.status", "")
+
+        self._radius = self.get_param("adas.radius", 50)
+        self._step = self.get_param("adas.min_look_forward", 1)
+
     def _send_cam(self):
         if (datetime.now() - self._st_time).total_seconds() < 10:
             return
 
-        if self._ok:
-            pkt = ETSI.format_msg(self.CAM(**self._trace[self._idx]), gn_addr_address=self._mac)
-            self._net.send_msg(pkt)
+        if self._status in [ ADStatus.GO.value, ADStatus.SLOW_DOWN ]:
             self._idx = (self._idx + 1) % (len(self._trace) - 1)
-
+       
         # TODO: else resend the last position with speed: 0.0
+        pkt = ETSI.format_msg(self.CAM(**self._trace[self._idx], speedValue=0), gn_addr_address=self._mac)
+        self._net.send_msg(pkt)
 
     def _rcv_pkt(self):
         pkt = self._net.get_new_msg()
@@ -75,10 +99,44 @@ class V2XBridge(Node):
         match pkt.get_id():
             case V2xTMsg.DENM:
                 msg = self._v2x_denm_to_ros(pkt)
-                self._pub_denm.publish(msg)
+                self._stop_sem(msg)
+                self._send_v2x_msg(self._pub_cam, msg)
             case V2xTMsg.CAM:
-                msg = self._v2x_cam_to_ros(pkt)
-                self._pub_cam.publish(msg)
+                msg = self._v2x_cam_to_ros(self._pub_denm, pkt)
+                self._pub_denm(msg)
+
+    def _stop_sem(self, msg):
+        # compute the distance between the two point
+        pos1 = (msg.latitude * 1e-7, msg.longitude * 1e-7)
+        pos2 = (self._trace[self._idx].get("latitude") * 1e-7, self._trace[self._idx].get("longitude") * 1e-7)
+
+        i_next = (self._idx + self._step) % (len(self._trace) - 1)
+        pos3 = (self._trace[i_next].get("latitude") * 1e-7, self._trace[i_next].get("longitude") * 1e-7)
+        d1, d2 = haversine(pos1, pos2, Unit.METERS), haversine(pos1, pos3, Unit.METERS)
+        
+        # if d3 is greater than 0 it means that the vehicles is getting closer to the semaphore
+        # if d3 is less than 0 it means that the vehicles is getting far from the the semaphore
+        d3 = d1 - d2
+        if d1 > self._radius or d2 > self._radius or d3 < 0:
+            return
+        
+        fpath, status = "denm.situation.eventType.subCauseCode", None
+        for i in range(1, len(fpath.split(".")) + 1):
+            p = ".".join( fpath.split(".")[-i:] )
+            if hasattr(dict(msg), p):
+                status = dict(msg).get(p)
+                break
+        else:
+            return
+
+        if status != self._status:
+            self._pub_status.publish( Int8(value=status) )
+            self._status = status
+
+
+    def _send_v2x_msg(self, pub, msg):
+        if self._enable_pub:
+            pub.publish(msg)            
 
     def _v2x_cam_to_ros(self, pkt):
 
