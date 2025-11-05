@@ -11,6 +11,7 @@
     topic:
       cam: "/v2x/cam"
       denm: "/v2x/denm"
+      status: "/adas/status"
     adas:
       radius: 50 # in meters
       min_look_forward: 2 # in index slicing

@@ -41,14 +41,13 @@ class V2XBridge(Node):
         self._pub_denm = self.create_publisher(DENM, self._dtopic, 10)
         self._pub_status = self.create_publisher(Int8, self._stopic, 10)
 
-        self.get_logger().info(f"starting time: {self._st_time}")
-        
         # --------------------- set up env ------------------
         self._idx, self._st_time = 0, datetime.now()
         self._net = V2xNetwork(self._iface, [self.DENM, self.CAM], filter=f"its && wlan.sa != {self._mac}")
         self._status = ADStatus.GO.value
-        self._pub_status.publish( Int8(value=ADStatus.GO.value) )
+        self._pub_status.publish( Int8(data=ADStatus.GO.value) )
 
+        self.get_logger().info(f"starting time: {self._st_time}")
 
     def get_param(self, name: str, default):
         self.declare_parameter(name, default)
@@ -83,12 +82,15 @@ class V2XBridge(Node):
     def _send_cam(self):
         if (datetime.now() - self._st_time).total_seconds() < 10:
             return
-
+        
+        cam = self.CAM(**self._trace[self._idx])
         if self._status in [ ADStatus.GO.value, ADStatus.SLOW_DOWN ]:
             self._idx = (self._idx + 1) % (len(self._trace) - 1)
-       
+        else:
+            cam.speedValue = 0
+
         # TODO: else resend the last position with speed: 0.0
-        pkt = ETSI.format_msg(self.CAM(**self._trace[self._idx], speedValue=0), gn_addr_address=self._mac)
+        pkt = ETSI.format_msg(cam, gn_addr_address=self._mac)
         self._net.send_msg(pkt)
 
     def _rcv_pkt(self):
@@ -99,11 +101,11 @@ class V2XBridge(Node):
         match pkt.get_id():
             case V2xTMsg.DENM:
                 msg = self._v2x_denm_to_ros(pkt)
-                self._stop_sem(msg)
+                self._stop_sem(pkt)
                 self._send_v2x_msg(self._pub_cam, msg)
             case V2xTMsg.CAM:
-                msg = self._v2x_cam_to_ros(self._pub_denm, pkt)
-                self._pub_denm(msg)
+                msg = self._v2x_cam_to_ros(pkt)
+                self._send_v2x_msg(self._pub_denm, msg)
 
     def _stop_sem(self, msg):
         # compute the distance between the two point
@@ -118,19 +120,22 @@ class V2XBridge(Node):
         # if d3 is less than 0 it means that the vehicles is getting far from the the semaphore
         d3 = d1 - d2
         if d1 > self._radius or d2 > self._radius or d3 < 0:
+            if status != self._status:
+                self._pub_status.publish( Int8(data=ADStatus.GO.value) )
+                self._status = ADStatus.GO.value
             return
         
         fpath, status = "denm.situation.eventType.subCauseCode", None
         for i in range(1, len(fpath.split(".")) + 1):
             p = ".".join( fpath.split(".")[-i:] )
-            if hasattr(dict(msg), p):
+            if p in dict(msg).keys():
                 status = dict(msg).get(p)
                 break
         else:
             return
 
         if status != self._status:
-            self._pub_status.publish( Int8(value=status) )
+            self._pub_status.publish( Int8(data=status) )
             self._status = status
 
 
