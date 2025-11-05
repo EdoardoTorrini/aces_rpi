@@ -45,7 +45,6 @@ class SchedR(Thread):
     def run(self):
         while self._run:
             self._callback()
-            time.sleep(random.randint(5, 12))
 
     def stop(self):
         self._run = False
@@ -67,10 +66,11 @@ class RSU:
 
         self._net = V2xNetwork(iface, tmsg)
         self._tmsg = tmsg
-
-        timer_cam = SchedT("cam_sender", self.send_cam, 0.1)
+        
+        # for now i don't want to send cam_msg on the rsu
+        # timer_cam = SchedT("cam_sender", self.send_cam, 0.5)
         timer_denm = SchedR("denm_sender", self.send_denm)
-        timer_cam.start()
+        # timer_cam.start()
         timer_denm.start()
 
     def send_cam(self):
@@ -80,7 +80,8 @@ class RSU:
 
     def send_denm(self):
         # 1 -> verde, 2 -> giallo, 3 -> rosso
-        for sub_code, period in zip([2, 3, 1], [2, 4, 0]):
+        for sub_code, period in zip([1, 2, 3], [3, 5, 10]):
+            time.sleep(period)
             msg = self._tmsg[V2xTMsg.DENM - 1](
                 protocolVersion=2,
                 messageID=1,
@@ -103,7 +104,6 @@ class RSU:
                 situation_eventType_subCauseCode=sub_code,
             )
             self._net.send_msg(ETSI.format_msg(msg, gn_addr_address="3E:B5:93:C7:D8:57"))
-            time.sleep(period)
 
 def main():
     
