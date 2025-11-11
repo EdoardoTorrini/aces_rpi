@@ -68,9 +68,9 @@ class RSU:
         self._tmsg = tmsg
         
         # for now i don't want to send cam_msg on the rsu
-        # timer_cam = SchedT("cam_sender", self.send_cam, 0.5)
+        timer_cam = SchedT("cam_sender", self.send_cam, 0.1)
         timer_denm = SchedR("denm_sender", self.send_denm)
-        # timer_cam.start()
+        timer_cam.start()
         timer_denm.start()
 
     def send_cam(self):
@@ -80,7 +80,7 @@ class RSU:
 
     def send_denm(self):
         # 1 -> verde, 2 -> giallo, 3 -> rosso
-        for sub_code, period in zip([1, 2, 3], [3, 5, 10]):
+        for sub_code, period in zip([1, 2, 3], [5, 10, 3]):
             time.sleep(period)
             msg = self._tmsg[V2xTMsg.DENM - 1](
                 protocolVersion=2,
